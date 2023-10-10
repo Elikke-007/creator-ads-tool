@@ -9,9 +9,5 @@ export const export2xAppLovin = async (options: TChannelPkgOptions) => {
   await exportSingleFile({
     ...options,
     channel,
-    transformHTML: async ($) => {
-      const sdkInjectScript = getChannelRCSdkScript(channel) || AD_SDK_SCRIPT
-      $(sdkInjectScript).appendTo('head')
-    },
   })
 }
