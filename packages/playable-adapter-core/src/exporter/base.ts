@@ -1,46 +1,50 @@
 import { join } from "path"
-import { CheerioAPI, load } from "cheerio";
+import { CheerioAPI, load } from "cheerio"
 import { mkdirSync } from "fs"
-import { MAX_ZIP_SIZE, REPLACE_SYMBOL } from "@/constants";
-import { injectFromRCJson } from "@/helpers/dom";
-import { TBuilderOptions, TZipFromSingleFileOptions } from "@/typings";
-import { getGlobalProjectBuildPath } from '@/global'
-import { writeToPath, readToPath, getOriginPkgPath, copyDirToPath, replaceGlobalSymbol, rmSync } from "@/utils"
-import JSZip from "jszip";
+import { MAX_ZIP_SIZE, REPLACE_SYMBOL } from "@/constants"
+import { injectFromRCJson } from "@/helpers/dom"
+import { TBuilderOptions, TZipFromSingleFileOptions } from "@/typings"
+import { getGlobalProjectBuildPath } from "@/global"
+import { writeToPath, readToPath, getOriginPkgPath, copyDirToPath, replaceGlobalSymbol, rmSync, createDir } from "@/utils"
+import JSZip from "jszip"
 
-const globalReplacer = async (options: Pick<TBuilderOptions, 'channel' | 'zipRes' | 'notZipRes'> & { $: CheerioAPI }) => {
+const globalReplacer = async (
+  options: Pick<TBuilderOptions, "channel" | "zipRes" | "notZipRes"> & { $: CheerioAPI },
+) => {
   const { channel, zipRes, notZipRes, $ } = options
 
   if (!zipRes && !notZipRes) {
     return
   }
 
-  let zip = new JSZip();
+  let zip = new JSZip()
 
   for (const key in zipRes) {
-    let data = zipRes[key];
+    let data = zipRes[key]
     data = data.replaceAll(REPLACE_SYMBOL, channel)
-    zip.file(key, data, { compression: 'DEFLATE' })
+    zip.file(key, data, { compression: "DEFLATE" })
   }
 
   // 增加压缩文件
-  const content = await zip.generateAsync({ type: 'nodebuffer' })
-  let strBase64 = Buffer.from(content).toString('base64');
+  const content = await zip.generateAsync({ type: "nodebuffer" })
+  let strBase64 = Buffer.from(content).toString("base64")
 
-  let splitSize = Number((MAX_ZIP_SIZE * .8).toFixed(0))
+  let splitSize = Number((MAX_ZIP_SIZE * 0.8).toFixed(0))
   let splitCount = Math.ceil(strBase64.length / splitSize)
   for (let index = 0; index < splitCount; index++) {
-    const str = strBase64.slice(index * splitSize, (index + 1) * splitSize);
+    const str = strBase64.slice(index * splitSize, (index + 1) * splitSize)
     if (index === 0) {
       $(`script[data-id="adapter-zip-0"]`).html(`window.__adapter_zip__="${str}";`)
     } else {
-      $(`script[data-id="adapter-zip-${index - 1}"]`).after(`<script data-id="adapter-zip-${index}">window.__adapter_zip__+="${str}";</script>`)
+      $(`script[data-id="adapter-zip-${index - 1}"]`).after(
+        `<script data-id="adapter-zip-${index}">window.__adapter_zip__+="${str}";</script>`,
+      )
     }
   }
 
   for (const key in notZipRes) {
     if (Object.prototype.hasOwnProperty.call(notZipRes, key)) {
-      const data = notZipRes[key];
+      const data = notZipRes[key]
       notZipRes[key] = data.replaceAll(REPLACE_SYMBOL, channel)
     }
   }
@@ -53,9 +57,9 @@ export const exportSingleFile = async (singleFilePath: string, options: TBuilder
   const { channel, transformHTML, transform, zipRes, notZipRes } = options
 
   console.info(`【${channel}】开始适配`)
-  const singleHtml = readToPath(singleFilePath, 'utf-8')
-  const targetPath = join(getGlobalProjectBuildPath(), `${channel}.html`)
-
+  const singleHtml = readToPath(singleFilePath, "utf-8")
+  const targetDir = createDir(join(getGlobalProjectBuildPath(), `${channel}`))
+  const targetPath = join(targetDir, `index.html`)
   // 替换全局变量
   let $ = load(singleHtml)
   await globalReplacer({
@@ -75,7 +79,7 @@ export const exportSingleFile = async (singleFilePath: string, options: TBuilder
   }
 
   if (transform) {
-    await transform(targetPath)
+    await transform(targetDir)
   }
 
   console.info(`【${channel}】完成适配`)
@@ -95,8 +99,8 @@ export const exportZipFromPkg = async (options: TBuilderOptions) => {
   replaceGlobalSymbol(destPath, channel)
 
   // 注入额外配置
-  const singleHtmlPath = join(destPath, '/index.html')
-  const singleHtml = readToPath(singleHtmlPath, 'utf-8')
+  const singleHtmlPath = join(destPath, "/index.html")
+  const singleHtml = readToPath(singleHtmlPath, "utf-8")
   const $ = load(singleHtml)
   await injectFromRCJson($, channel)
 
@@ -117,7 +121,6 @@ export const exportZipFromPkg = async (options: TBuilderOptions) => {
   // // 删除多余文件夹
   // rmSync(destPath)
 
-
   console.info(`【${channel}】完成适配`)
 }
 
@@ -134,21 +137,21 @@ export const exportDirZipFromSingleFile = async (singleFilePath: string, options
   rmSync(destPath)
 
   // html文件路径
-  const htmlPath = join(destPath, '/index.html')
+  const htmlPath = join(destPath, "/index.html")
 
   // 创建js目录
-  const jsDirname = '/js'
+  const jsDirname = "/js"
   const jsDirPath = join(destPath, jsDirname)
   mkdirSync(jsDirPath, { recursive: true })
 
-  let $ = load(readToPath(singleHtmlPath, 'utf-8'))
+  let $ = load(readToPath(singleHtmlPath, "utf-8"))
 
   // 替换全局变量
   await globalReplacer({
     channel,
     zipRes: zipRes ? { ...zipRes } : {},
     notZipRes: notZipRes ? { ...notZipRes } : {},
-    $
+    $,
   })
 
   // 注入配置文件
@@ -157,7 +160,7 @@ export const exportDirZipFromSingleFile = async (singleFilePath: string, options
   // 抽离所有script并生成js文件
   const scriptNodes = $('body script[type!="systemjs-importmap"]')
   for (let index = 0; index < scriptNodes.length; index++) {
-    const scriptNode = $(scriptNodes[index]);
+    const scriptNode = $(scriptNodes[index])
     if (transformScript) {
       await transformScript(scriptNode)
     }
@@ -171,7 +174,7 @@ export const exportDirZipFromSingleFile = async (singleFilePath: string, options
 
   if (transformHTML) {
     await transformHTML($)
-    const htmlPath = join(destPath, '/index.html')
+    const htmlPath = join(destPath, "/index.html")
     writeToPath(htmlPath, $.html())
   }
 
